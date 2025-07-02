@@ -10,11 +10,14 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.10",
+    "colorthief": "^2.6.0",
     "lucide-vue-next": "^0.523.0",
+    "pinia": "^3.0.3",
     "tailwindcss": "^4.1.10",
     "vue": "^3.5.17"
   },
   "devDependencies": {
+    "@tailwindcss/forms": "^0.5.10",
     "@vitejs/plugin-vue": "^6.0.0",
     "@vue/tsconfig": "^0.7.0",
     "typescript": "~5.8.3",
