@@ -2,22 +2,16 @@
 
 import { defineStore } from 'pinia';
 import ColorThief from 'colorthief';
-import type { Playlist, Track } from '../types';
+import type { Playlist, Track, LyricLine } from '../types';
 import { apiFetch } from '../services/api';
 import { useUserStore } from './user';
 
 export const LIKED_SONGS_PLAYLIST_ID = -1;
 
 export enum PlayMode {
-  List = 'LIST', // 列表循环
-  Single = 'SINGLE', // 单曲循环
-  Random = 'RANDOM', // 随机播放
-}
-
-// 定义歌词行的数据结构
-export interface LyricLine {
-  time: number;
-  text: string;
+  List = 'LIST',
+  Single = 'SINGLE',
+  Random = 'RANDOM',
 }
 
 const colorThief = new ColorThief();
@@ -34,11 +28,8 @@ export const usePlayerStore = defineStore('player', {
     isLoading: false,
     playMode: PlayMode.List,
     dominantColor: 'rgb(18, 18, 18)',
-    
-    // --- 歌词相关状态 ---
-    parsedLrc: [] as LyricLine[], // 解析后的歌词数组
-    currentLrcIndex: -1, // 当前高亮歌词的索引
-
+    parsedLrc: [] as LyricLine[],
+    currentLrcIndex: -1,
     playback: {
       currentTime: 0,
       duration: 0,
@@ -54,41 +45,40 @@ export const usePlayerStore = defineStore('player', {
   },
 
   actions: {
+    // 核心修改：优化“下一首播放”逻辑
+    addNext(tracks: Track[]) {
+      if (tracks.length === 0) return;
+      
+      // 从待添加的曲目中，过滤掉播放队列里已存在的歌曲
+      const uniqueTracks = tracks.filter(
+        trackToAdd => !this.playQueue.some(itemInQueue => itemInQueue.id === trackToAdd.id)
+      );
+
+      if (uniqueTracks.length === 0) {
+        alert('歌曲已在播放列表中');
+        return;
+      }
+      
+      // 将新歌插入到当前歌曲的后面
+      if (this.currentSongIndex > -1) {
+        this.playQueue.splice(this.currentSongIndex + 1, 0, ...uniqueTracks);
+      } else {
+        // 如果当前没有歌曲播放，则直接添加到队列头部
+        this.playQueue.unshift(...uniqueTracks);
+      }
+      alert(`已添加 ${uniqueTracks.length} 首歌曲到播放列表`);
+    },
+
     init(audioElement: HTMLAudioElement) {
       this.audio = audioElement;
       this.audio.volume = this.playback.volume;
     },
 
-     // 新增：将歌曲添加到下一首播放
-     addNext(tracks: Track[]) {
-        if (tracks.length === 0) return;
-        // 去重，避免重复添加
-        const uniqueTracks = tracks.filter(track => !this.playQueue.find(item => item.id === track.id));
-        if (uniqueTracks.length === 0) {
-          alert('歌曲已在播放列表中');
-          return;
-        }
-        
-        if (this.currentSongIndex > -1) {
-          this.playQueue.splice(this.currentSongIndex + 1, 0, ...uniqueTracks);
-        } else {
-          // 如果当前没有歌曲播放，则直接添加到队列头部
-          this.playQueue.unshift(...uniqueTracks);
-        }
-        alert(`已添加 ${uniqueTracks.length} 首歌曲到播放列表`);
-      },
-
     changePlayMode() {
       switch (this.playMode) {
-        case PlayMode.List:
-          this.playMode = PlayMode.Single;
-          break;
-        case PlayMode.Single:
-          this.playMode = PlayMode.Random;
-          break;
-        case PlayMode.Random:
-          this.playMode = PlayMode.List;
-          break;
+        case PlayMode.List: this.playMode = PlayMode.Single; break;
+        case PlayMode.Single: this.playMode = PlayMode.Random; break;
+        case PlayMode.Random: this.playMode = PlayMode.List; break;
       }
     },
 
@@ -132,7 +122,7 @@ export const usePlayerStore = defineStore('player', {
         this.isLoading = false;
       }
     },
-
+    
     async playSong(song: Track) {
       if (!this.audio) return;
       

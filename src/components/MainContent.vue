@@ -1,57 +1,62 @@
 <!-- 
   文件路径: src/components/MainContent.vue
-  描述: 移除了@tailwindcss/forms依赖，并手动实现了自定义复选框。
+  描述: 实现多选模式切换、吸顶操作栏、修复勾选逻辑、新增歌手列。
 -->
 <template>
     <main 
       class="flex-1 overflow-y-auto bg-gradient-to-b from-[#222] to-[#121212] relative"
       @click="contextMenu.show = false"
     >
-      <!-- 多选操作栏 -->
-      <div v-if="selectedTrackIds.length > 0" class="sticky top-0 bg-[#121212]/80 backdrop-blur-sm p-4 z-10 flex items-center justify-between">
-        <span class="text-sm font-bold">已选择 {{ selectedTrackIds.length }} 首歌曲</span>
-        <div class="flex items-center space-x-4">
-          <button @click="handlePlayNext" class="flex items-center space-x-2 px-4 py-2 bg-blue-600 rounded-full text-white hover:bg-blue-700 transition-colors">
-            <Play class="w-5 h-5" />
-            <span>下一首播放</span>
-          </button>
-          <button @click="handleLikeSelected" class="flex items-center space-x-2 px-4 py-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
-            <Heart class="w-5 h-5" />
-            <span>收藏</span>
-          </button>
-        </div>
-      </div>
-  
       <div v-if="playerStore.currentPlaylist && !playerStore.isLoading" class="p-6">
         <!-- 歌单头部信息 -->
         <div class="flex items-end mb-8">
           <img :src="playerStore.currentPlaylist.coverImgUrl" class="w-48 h-48 rounded-lg shadow-lg mr-6 flex-shrink-0">
-          <div class="overflow-hidden">
+          <div class="overflow-hidden flex-1">
             <p class="text-sm">歌单</p>
             <h1 class="text-5xl font-extrabold mb-4 truncate">{{ playerStore.currentPlaylist.name }}</h1>
             <p class="text-gray-200 text-sm truncate">{{ playerStore.currentPlaylist.description }}</p>
           </div>
         </div>
+  
+        <!-- 吸顶操作栏：包含多选开关和多选操作按钮 -->
+        <div class="sticky top-0 bg-[#121212]/80 backdrop-blur-sm py-3 z-10 flex items-center justify-between mb-4">
+          <button @click="toggleMultiSelectMode" class="p-2 rounded-full hover:bg-white/10 transition-colors" title="多选">
+            <ListChecks class="w-6 h-6" :class="isMultiSelectMode ? 'text-blue-400' : 'text-gray-400'" />
+          </button>
+          <div v-if="selectedTrackIds.length > 0" class="flex items-center space-x-4">
+            <span class="text-sm font-bold">已选择 {{ selectedTrackIds.length }} 首</span>
+            <button @click="handlePlayNext" class="flex items-center space-x-2 px-4 py-2 bg-blue-600 rounded-full text-white hover:bg-blue-700 transition-colors text-sm">
+              <Play class="w-4 h-4" />
+              <span>下一首播放</span>
+            </button>
+            <button @click="handleLikeSelected" class="flex items-center space-x-2 px-4 py-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors text-sm">
+              <Heart class="w-4 h-4" />
+              <span>收藏</span>
+            </button>
+          </div>
+        </div>
+  
         <!-- 歌曲列表 -->
         <table class="w-full text-left table-fixed">
           <thead class="text-gray-300 border-b border-white/10 text-sm">
             <tr>
               <th class="p-3 w-16 text-center font-normal">
-                <!-- 自定义复选框实现 -->
-                <label class="relative flex items-center justify-center cursor-pointer">
+                <label v-if="isMultiSelectMode" class="relative flex items-center justify-center cursor-pointer">
                   <input type="checkbox" @change="toggleSelectAll" :checked="isAllSelected" class="sr-only peer">
                   <div class="w-5 h-5 bg-transparent border-2 border-gray-500 rounded peer-checked:bg-blue-600 peer-checked:border-blue-600 transition-colors"></div>
                   <Check class="w-4 h-4 text-white absolute opacity-0 peer-checked:opacity-100 transition-opacity" />
                 </label>
+                <span v-else>#</span>
               </th>
               <th class="p-3 font-normal">标题</th>
+              <th class="p-3 font-normal">歌手</th>
               <th class="p-3 font-normal">专辑</th>
-              <th class="p-3 w-32 font-normal text-right">时长</th>
+              <th class="p-3 w-24 font-normal text-right">时长</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(track, index) in playerStore.currentPlayingList" :key="track.id"
-                @dblclick="playerStore.playSong(track)"
+                @dblclick="!isMultiSelectMode && playerStore.playSong(track)"
                 @click.exact="handleRowClick(track, index)"
                 @click.ctrl.exact="handleRowClick(track, index, { ctrl: true })"
                 @click.meta.exact="handleRowClick(track, index, { ctrl: true })"
@@ -64,11 +69,11 @@
                   'text-green-400': playerStore.currentSong && playerStore.currentSong.id === track.id
                 }">
               <td class="p-3 text-center">
-                 <!-- 自定义复选框实现 -->
-                <div class="relative flex items-center justify-center pointer-events-none">
+                <div v-if="isMultiSelectMode" class="relative flex items-center justify-center pointer-events-none">
                   <div class="w-5 h-5 bg-transparent border-2 border-gray-500 rounded" :class="{'bg-blue-600 border-blue-600': selectedTrackIds.includes(track.id)}"></div>
                   <Check class="w-4 h-4 text-white absolute transition-opacity" :class="selectedTrackIds.includes(track.id) ? 'opacity-100' : 'opacity-0'" />
                 </div>
+                <span v-else class="text-gray-400 group-hover:text-white">{{ index + 1 }}</span>
               </td>
               <td class="p-3 flex items-center overflow-hidden">
                 <img :src="track.al.picUrl" class="w-10 h-10 rounded mr-4 flex-shrink-0">
@@ -77,9 +82,11 @@
                   <p class="text-xs text-gray-400 truncate">{{ track.ar.map(a => a.name).join(' / ') }}</p>
                 </div>
               </td>
+              <!-- 新增：歌手列 -->
+              <td class="p-3 truncate text-gray-300 group-hover:text-white">{{ track.ar.map(a => a.name).join(' / ') }}</td>
               <td class="p-3 truncate text-gray-300 group-hover:text-white">{{ track.al.name }}</td>
-              <td class="p-3 w-32 text-right text-gray-300 group-hover:text-white flex items-center justify-end space-x-4">
-                <button @click.stop="userStore.likeSong(track.id, !isLiked(track.id))" class="opacity-0 group-hover:opacity-100 transition-opacity">
+              <td class="p-3 w-24 text-right text-gray-300 group-hover:text-white">
+                <button @click.stop="userStore.likeSong(track.id, !isLiked(track.id))" class="opacity-0 group-hover:opacity-100 transition-opacity mr-4">
                   <Heart :fill="isLiked(track.id) ? 'currentColor' : 'none'" class="w-5 h-5" :class="isLiked(track.id) ? 'text-red-500' : 'text-gray-400'" />
                 </button>
                 <span>{{ formatDuration(track.dt / 1000) }}</span>
@@ -89,11 +96,9 @@
         </table>
       </div>
       
-      <!-- 加载与空状态 (保持不变) -->
       <div v-if="playerStore.isLoading" class="flex items-center justify-center h-full">...</div>
       <div v-if="!playerStore.currentPlaylist && !playerStore.isLoading" class="flex flex-col items-center justify-center h-full text-gray-400">...</div>
       
-      <!-- 右键上下文菜单 -->
       <div v-if="contextMenu.show" 
            class="absolute bg-[#282828] rounded-lg shadow-lg p-2 text-sm z-20"
            :style="{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }">
@@ -102,13 +107,12 @@
           <li @click="handleLikeSelected()" class="px-4 py-2 hover:bg-white/10 rounded-md flex items-center"><Heart class="w-4 h-4 mr-2"/>收藏到歌单</li>
         </ul>
       </div>
-  
     </main>
   </template>
   
   <script setup lang="ts">
   import { ref, computed, reactive } from 'vue';
-  import { Music, Heart, Play, Check } from 'lucide-vue-next';
+  import { Music, Heart, Play, Check, ListChecks } from 'lucide-vue-next';
   import { usePlayerStore } from '../store/player';
   import { useUserStore } from '../store/user';
   import type { Track } from '../types';
@@ -116,6 +120,7 @@
   const playerStore = usePlayerStore();
   const userStore = useUserStore();
   
+  const isMultiSelectMode = ref(false);
   const selectedTrackIds = ref<number[]>([]);
   const lastSelectedTrackIndex = ref(-1);
   
@@ -139,6 +144,13 @@
     return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
   };
   
+  const toggleMultiSelectMode = () => {
+    isMultiSelectMode.value = !isMultiSelectMode.value;
+    if (!isMultiSelectMode.value) {
+      selectedTrackIds.value = [];
+    }
+  };
+  
   const toggleSelectAll = (event: Event) => {
     const target = event.target as HTMLInputElement;
     if (target.checked) {
@@ -148,22 +160,24 @@
     }
   };
   
+  // 核心修改：修复勾选逻辑
   const handleRowClick = (track: Track, index: number, options: { ctrl?: boolean, shift?: boolean } = {}) => {
+    if (!isMultiSelectMode.value) return;
+  
+    const trackId = track.id;
     if (options.shift && lastSelectedTrackIndex.value !== -1) {
       const start = Math.min(index, lastSelectedTrackIndex.value);
       const end = Math.max(index, lastSelectedTrackIndex.value);
       const rangeIds = playerStore.currentPlayingList.slice(start, end + 1).map(t => t.id);
       const currentSelection = new Set([...selectedTrackIds.value, ...rangeIds]);
       selectedTrackIds.value = Array.from(currentSelection);
-    } else if (options.ctrl) {
-      const selectedIndex = selectedTrackIds.value.indexOf(track.id);
+    } else {
+      const selectedIndex = selectedTrackIds.value.indexOf(trackId);
       if (selectedIndex > -1) {
         selectedTrackIds.value.splice(selectedIndex, 1);
       } else {
-        selectedTrackIds.value.push(track.id);
+        selectedTrackIds.value.push(trackId);
       }
-    } else {
-      selectedTrackIds.value = [track.id];
     }
     lastSelectedTrackIndex.value = index;
   };
@@ -202,7 +216,6 @@
   </script>
   
   <style>
-  /* 移除了对 @tailwindcss/forms 的依赖 */
   main::-webkit-scrollbar { display: none; }
   main { -ms-overflow-style: none; scrollbar-width: none; }
   </style>

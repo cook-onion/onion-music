@@ -8,4 +8,7 @@ export default defineConfig({
     tailwindcss(),
     // ...
   ],
+  server: { // 添加这个 server 配置
+    host: true // 或者写 '0.0.0.0'
+  }
 })

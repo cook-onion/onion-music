@@ -27,3 +27,9 @@ export interface Track {
     description: string | null;
     tracks: Track[];
   }
+
+  // 新增：歌词行的数据结构
+export interface LyricLine {
+    time: number;
+    text: string;
+  }

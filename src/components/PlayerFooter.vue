@@ -1,11 +1,35 @@
 <!-- 
   文件路径: src/components/PlayerFooter.vue
-  描述: 播放器组件，新增歌词显示和高级拖拽功能。
+  描述: 播放器组件，已添加动态歌词并调整了按钮布局。
 -->
 <template>
     <footer 
-      class="h-24 bg-[#181818] border-t border-white/10 flex-shrink-0 flex items-center justify-between px-4"
+      class="h-24 bg-[#181818] border-t border-white/10 flex-shrink-0 flex items-center justify-between px-4 relative"
     >
+      <!-- 播放列表面板 -->
+      <div v-if="showPlaylist" v-on-click-outside="() => showPlaylist = false" class="absolute bottom-full right-0 mb-2 w-96 max-h-96 bg-[#282828] rounded-lg shadow-2xl p-2 overflow-y-auto z-30">
+        <h3 class="text-lg font-bold p-2">播放列表 ({{ playerStore.playQueue.length }})</h3>
+        <ul>
+          <li 
+            v-for="(track, index) in playerStore.playQueue" 
+            :key="track.id + '-' + index"
+            @dblclick="playerStore.playSong(track)"
+            class="flex items-center justify-between p-2 rounded-md hover:bg-white/10 cursor-pointer"
+            :class="{'text-green-400': playerStore.currentSong?.id === track.id}"
+          >
+            <div class="flex items-center truncate">
+              <span class="w-6 text-center text-xs mr-2">{{ index + 1 }}</span>
+              <img :src="track.al.picUrl" class="w-8 h-8 rounded-sm mr-3 flex-shrink-0">
+              <div class="truncate">
+                <p class="truncate text-sm">{{ track.name }}</p>
+                <p class="truncate text-xs text-gray-400">{{ track.ar.map(a => a.name).join(' / ') }}</p>
+              </div>
+            </div>
+            <span class="text-xs text-gray-400 flex-shrink-0 ml-4">{{ formatDuration(track.dt / 1000) }}</span>
+          </li>
+        </ul>
+      </div>
+  
       <!-- 左侧歌曲信息 -->
       <div class="flex items-center w-1/4 min-w-0">
         <img v-if="playerStore.currentSong" :src="playerStore.currentSong.al.picUrl" class="w-16 h-16 rounded-md mr-4 flex-shrink-0">
@@ -33,6 +57,11 @@
           <button @click="playerStore.playNext()" class="p-2 rounded-full hover:bg-white/10 transition-colors">
             <SkipForward class="cursor-pointer text-gray-200"/>
           </button>
+          <!-- 播放列表按钮移动到此处 -->
+          <button @click.stop="showPlaylist = !showPlaylist" class="p-2 rounded-full hover:bg-white/10 transition-colors">
+            <ListMusic class="w-5 h-5" :class="showPlaylist ? 'text-blue-400' : 'text-gray-400'"/>
+          </button>
+          <!-- 循环模式按钮 -->
           <button @click="playerStore.changePlayMode()" title="切换播放模式" class="p-2 rounded-full hover:bg-white/10 transition-colors relative">
             <Repeat1 v-if="playerStore.playMode === 'SINGLE'" class="cursor-pointer text-blue-400" />
             <Repeat v-else class="cursor-pointer" :class="playerStore.playMode === 'LIST' ? 'text-blue-400' : 'text-gray-400'" />
@@ -56,7 +85,7 @@
       
       <!-- 右侧区域: 歌词 + 音量控制 -->
       <div class="flex items-center justify-end w-1/4 space-x-4">
-        <!-- 新增：歌词显示区域 -->
+        <!-- 动态歌词显示区域 -->
         <div class="w-64 h-16 overflow-hidden relative text-center" v-if="playerStore.parsedLrc.length > 0">
           <div 
             class="absolute inset-0" 
@@ -97,12 +126,14 @@
   
   <script setup lang="ts">
   import { ref, onUnmounted, computed } from 'vue';
-  import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat, Repeat1, Volume2 } from 'lucide-vue-next';
+  import { vOnClickOutside } from '@vueuse/components'
+  import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat, Repeat1, Volume2, ListMusic } from 'lucide-vue-next';
   import { usePlayerStore } from '../store/player';
   
   const playerStore = usePlayerStore();
   const progressBar = ref<HTMLElement | null>(null);
   const volumeBar = ref<HTMLElement | null>(null);
+  const showPlaylist = ref(false);
   
   // --- 拖拽状态 ---
   const isDraggingProgress = ref(false);
@@ -129,8 +160,6 @@
   });
   
   const lyricsTranslateY = computed(() => {
-    // 每行歌词高度为32px (h-8), 我们希望高亮行在第二行（总共4行可见）
-    // 容器高度64px, 歌词行高32px。中心位置是 64/2 - 32/2 = 16px
     const centerOffset = 16;
     if (lyricIndexToDisplay.value > -1) {
       return centerOffset - lyricIndexToDisplay.value * 32;
@@ -177,11 +206,28 @@
     draggedTime.value = newProgress * playerStore.playback.duration;
   };
   
-  // --- 拖动音量条逻辑 (保持不变) ---
-  const onVolumeMouseDown = (event: MouseEvent) => { /* ... */ };
-  const onVolumeMouseMove = (event: MouseEvent) => { /* ... */ };
-  const onVolumeMouseUp = () => { /* ... */ };
-  const updateVolumeFromEvent = (event: MouseEvent) => { /* ... */ };
+  // --- 拖动音量条逻辑 ---
+  const onVolumeMouseDown = (event: MouseEvent) => {
+    event.preventDefault();
+    updateVolumeFromEvent(event);
+    window.addEventListener('mousemove', onVolumeMouseMove);
+    window.addEventListener('mouseup', onVolumeMouseUp);
+  };
+  const onVolumeMouseMove = (event: MouseEvent) => {
+    updateVolumeFromEvent(event);
+  };
+  const onVolumeMouseUp = () => {
+    window.removeEventListener('mousemove', onVolumeMouseMove);
+    window.removeEventListener('mouseup', onVolumeMouseUp);
+  };
+  const updateVolumeFromEvent = (event: MouseEvent) => {
+    if (!volumeBar.value) return;
+    const rect = volumeBar.value.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const width = rect.width;
+    const newVolume = Math.max(0, Math.min(1, clickX / width));
+    playerStore.setAudioVolume(newVolume);
+  };
   
   onUnmounted(() => {
     window.removeEventListener('mousemove', onProgressMouseMove);
