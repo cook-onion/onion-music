@@ -88,40 +88,44 @@ export const usePlayerStore = defineStore('player', {
     },
 
     async getPlaylistDetail(id: number) {
-      this.isLoading = true;
-      try {
-        const detailRes = await apiFetch(`/playlist/detail?id=${id}`);
-        const trackRes = await apiFetch(`/playlist/track/all?id=${id}&limit=500`);
-        const fullPlaylist = { ...detailRes.playlist, tracks: trackRes.songs };
-        this.loadPlaylist(fullPlaylist);
-      } catch (error) {
-        console.error("获取歌单详情失败:", error);
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    async showLikedSongs() {
-      const userStore = useUserStore();
-      if (userStore.likedSongIds.length === 0) return;
-      this.isLoading = true;
-      try {
-        const songIds = userStore.likedSongIds.join(',');
-        const res = await apiFetch(`/song/detail?ids=${songIds}`);
-        const likedPlaylist: Playlist = {
-          id: LIKED_SONGS_PLAYLIST_ID,
-          name: '我喜欢的音乐',
-          coverImgUrl: res.songs[0]?.al?.picUrl || '',
-          description: `共 ${res.songs.length} 首歌曲`,
-          tracks: res.songs,
-        };
-        this.loadPlaylist(likedPlaylist);
-      } catch (error) {
-        console.error("获取喜欢歌曲详情失败:", error);
-      } finally {
-        this.isLoading = false;
-      }
-    },
+        // 核心修改：先清空当前歌单，再开启加载状态
+        this.currentPlaylist = null;
+        this.isLoading = true;
+        try {
+          const detailRes = await apiFetch(`/playlist/detail?id=${id}`);
+          const trackRes = await apiFetch(`/playlist/track/all?id=${id}&limit=500`);
+          const fullPlaylist = { ...detailRes.playlist, tracks: trackRes.songs };
+          this.loadPlaylist(fullPlaylist);
+        } catch (error) {
+          console.error("获取歌单详情失败:", error);
+        } finally {
+          this.isLoading = false;
+        }
+      },
+  
+      async showLikedSongs() {
+        const userStore = useUserStore();
+        if (userStore.likedSongIds.length === 0) return;
+        // 核心修改：先清空当前歌单，再开启加载状态
+        this.currentPlaylist = null;
+        this.isLoading = true;
+        try {
+          const songIds = userStore.likedSongIds.join(',');
+          const res = await apiFetch(`/song/detail?ids=${songIds}`);
+          const likedPlaylist: Playlist = {
+            id: LIKED_SONGS_PLAYLIST_ID,
+            name: '我喜欢的音乐',
+            coverImgUrl: res.songs[0]?.al?.picUrl || '',
+            description: `共 ${res.songs.length} 首歌曲`,
+            tracks: res.songs,
+          };
+          this.loadPlaylist(likedPlaylist);
+        } catch (error) {
+          console.error("获取喜欢歌曲详情失败:", error);
+        } finally {
+          this.isLoading = false;
+        }
+      },
     
     async playSong(song: Track) {
       if (!this.audio) return;

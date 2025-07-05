@@ -135,7 +135,6 @@
   const volumeBar = ref<HTMLElement | null>(null);
   const showPlaylist = ref(false);
   
-  // --- 拖拽状态 ---
   const isDraggingProgress = ref(false);
   const draggedTime = ref<number | null>(null);
   
@@ -146,7 +145,6 @@
     return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
   };
   
-  // --- 歌词计算属性 ---
   const lyricIndexToDisplay = computed(() => {
     const time = draggedTime.value !== null ? draggedTime.value : playerStore.playback.currentTime;
     if (playerStore.parsedLrc.length > 0) {
@@ -167,15 +165,12 @@
     return centerOffset;
   });
   
-  // --- 进度条计算属性 ---
   const progressBarWidth = computed(() => {
     if (playerStore.playback.duration === 0) return '0%';
     const time = draggedTime.value !== null ? draggedTime.value : playerStore.playback.currentTime;
     return `${(time / playerStore.playback.duration) * 100}%`;
   });
   
-  
-  // --- 拖动进度条逻辑 ---
   const onProgressMouseDown = (event: MouseEvent) => {
     if (!playerStore.currentSong) return;
     isDraggingProgress.value = true;
@@ -206,7 +201,6 @@
     draggedTime.value = newProgress * playerStore.playback.duration;
   };
   
-  // --- 拖动音量条逻辑 ---
   const onVolumeMouseDown = (event: MouseEvent) => {
     event.preventDefault();
     updateVolumeFromEvent(event);
