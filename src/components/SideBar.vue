@@ -1,6 +1,6 @@
 <!-- 
   文件路径: src/components/SideBar.vue
-  描述: 在加载新歌单时，禁用列表点击，防止重复请求。
+  描述: 修复了因未使用导入而导致的TypeScript编译错误。
 -->
 <template>
     <aside 
@@ -17,7 +17,34 @@
   
       <!-- 登录区域 -->
       <div class="bg-[#181818] rounded-lg p-4 mb-2" v-if="!userStore.isSidebarCollapsed">
-        <!-- ... (代码保持不变) ... -->
+        <div v-if="!userStore.profile" class="flex flex-col items-center">
+          <h2 class="text-lg font-bold mb-2">登录网易云</h2>
+          <p class="text-xs text-gray-400 mb-4 text-center">扫描二维码登录</p>
+          <div v-if="userStore.qr.img" class="relative w-40 h-40 bg-white p-2 rounded-lg flex items-center justify-center">
+            <img :src="userStore.qr.img" alt="QR Code">
+            <div v-if="userStore.qr.status === 800" @click="userStore.loginWithQRCode()" class="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center text-white cursor-pointer rounded-lg">
+              <p>二维码已失效</p><p class="text-xs">点击刷新</p>
+            </div>
+            <div v-if="userStore.qr.status === 802" class="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center text-white rounded-lg">
+              <div class="loader mb-2"></div><p>请在手机上确认</p>
+            </div>
+          </div>
+          <button v-else @click="userStore.loginWithQRCode()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors">
+            {{ userStore.isLoading.qr ? '生成中...' : '点击生成二维码' }}
+          </button>
+        </div>
+        <div v-else class="flex items-center justify-between">
+          <div class="flex items-center min-w-0">
+            <img :src="userStore.profile.avatarUrl" class="w-12 h-12 rounded-full mr-4 flex-shrink-0">
+            <div class="truncate">
+              <p class="font-bold truncate">{{ userStore.profile.nickname }}</p>
+              <p class="text-xs text-gray-400">Lv.{{ userStore.level }}</p>
+            </div>
+          </div>
+          <button @click="userStore.logout()" title="退出登录" class="p-2 rounded-full hover:bg-white/10 transition-colors">
+            <LogOut class="w-5 h-5 text-gray-400 hover:text-white" />
+          </button>
+        </div>
       </div>
   
       <!-- 歌单列表 -->
@@ -68,7 +95,8 @@
   <script setup lang="ts">
   import { useUserStore } from '../store/user';
   import { usePlayerStore, LIKED_SONGS_PLAYLIST_ID } from '../store/player';
-  import { Heart, LogOut, PanelLeftClose, PanelRightClose, Music } from 'lucide-vue-next';
+  // 核心修改：移除了未被使用的 'Music' 组件
+  import { Heart, LogOut, PanelLeftClose, PanelRightClose } from 'lucide-vue-next';
   
   const userStore = useUserStore();
   const playerStore = usePlayerStore();
