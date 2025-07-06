@@ -2,11 +2,10 @@
 
 import { defineStore } from 'pinia';
 import ColorThief from 'colorthief';
-import type { Playlist, Track, LyricLine, Artist, ArtistDetail } from '../types';
+import type { Playlist, Track, LyricLine, ArtistDetail } from '../types';
 import { apiFetch } from '../services/api';
 import { useUserStore } from './user';
 
-export const LIKED_SONGS_PLAYLIST_ID = -1;
 
 export enum PlayMode {
   List = 'LIST',
@@ -159,7 +158,14 @@ export const usePlayerStore = defineStore('player', {
       }
       alert(`已添加 ${uniqueTracks.length} 首歌曲到播放列表`);
     },
+    // 添加歌曲到播放队列，但不立即播放
 
+    reorderQueue(newQueue: Track[]) {
+        this.playQueue = newQueue;
+        if (this.currentSong) {
+          this.currentSongIndex = this.playQueue.findIndex(track => track.id === this.currentSong!.id);
+        }
+      },
     async getPlaylistDetail(id: number) {
       this.isLoading = true;
       this.currentPlaylist = null;
@@ -198,30 +204,7 @@ export const usePlayerStore = defineStore('player', {
       }
     },
 
-    async showLikedSongs() {
-      this.isLoading = true;
-      this.currentPlaylist = null;
-      this.currentArtist = null;
-      this.currentRecordType = null;
-      this.currentView = 'playlist';
-      try {
-        const userStore = useUserStore();
-        if (userStore.likedSongIds.length === 0) return;
-        const songIds = userStore.likedSongIds.join(',');
-        const res = await apiFetch(`/song/detail?ids=${songIds}`);
-        this.currentPlaylist = {
-          id: LIKED_SONGS_PLAYLIST_ID,
-          name: '我喜欢的音乐',
-          coverImgUrl: res.songs[0]?.al?.picUrl || '',
-          description: `根据您的收藏生成`,
-          tracks: res.songs,
-        };
-      } catch (error) {
-        console.error("获取喜欢歌曲详情失败:", error);
-      } finally {
-        this.isLoading = false;
-      }
-    },
+   
     
     async showArtistPage(artistId: number) {
       this.currentView = 'artist';

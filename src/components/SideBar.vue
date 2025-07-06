@@ -1,6 +1,6 @@
 <!-- 
   文件路径: src/components/SideBar.vue
-  描述: 将“我喜欢的音乐”替换为“听歌排行”。
+  描述: 移除了“我喜欢的音乐”菜单项。
 -->
 <template>
     <aside 
@@ -65,8 +65,6 @@
             <span v-if="!userStore.isSidebarCollapsed" class="font-semibold">听歌排行</span>
           </li>
   
-        
-  
           <hr v-if="!userStore.isSidebarCollapsed && userStore.playlists.length > 0" class="border-gray-700 my-2">
           <li v-for="playlist in userStore.playlists" :key="playlist.id"
               @click="playerStore.getPlaylistDetail(playlist.id)"
@@ -94,8 +92,8 @@
   
   <script setup lang="ts">
   import { useUserStore } from '../store/user';
-  import { usePlayerStore, LIKED_SONGS_PLAYLIST_ID } from '../store/player';
-  import { Heart, LogOut, PanelLeftClose, PanelRightClose, BarChart2 } from 'lucide-vue-next';
+  import { usePlayerStore } from '../store/player';
+  import { LogOut, PanelLeftClose, PanelRightClose, BarChart2 } from 'lucide-vue-next';
   
   const userStore = useUserStore();
   const playerStore = usePlayerStore();

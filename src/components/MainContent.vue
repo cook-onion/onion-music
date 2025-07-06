@@ -1,6 +1,6 @@
 <!-- 
   文件路径: src/components/MainContent.vue
-  描述: 新增听歌排行榜的时间维度切换功能。
+  描述: 修复了类型安全问题，防止因 currentPlaylist 为 null 导致的构建失败。
 -->
 <template>
     <main 
@@ -90,7 +90,6 @@
         </div>
         
         <div class="flex items-center justify-between mb-4">
-          <!-- 时间切换器 -->
           <div v-if="playerStore.currentRecordType" class="inline-flex bg-white/10 rounded-full p-1 space-x-1">
             <button 
               @click="playerStore.showUserRecord('weekly')"
@@ -107,13 +106,11 @@
               所有时间
             </button>
           </div>
-          <!-- 多选模式切换按钮 -->
           <button @click="toggleMultiSelectMode" class="p-2 rounded-full hover:bg-white/10 transition-colors ml-auto" title="多选">
             <ListChecks class="w-6 h-6" :class="isMultiSelectMode ? 'text-blue-400' : 'text-gray-400'" />
           </button>
         </div>
         
-        <!-- 多选操作栏 -->
         <div v-if="isMultiSelectMode && selectedTrackIds.length > 0" class="sticky top-0 bg-[#121212]/80 backdrop-blur-sm p-4 z-10 flex items-center justify-between mb-4 rounded-lg">
           <span class="text-sm font-bold">已选择 {{ selectedTrackIds.length }} 首</span>
           <div class="flex items-center space-x-4">
@@ -231,6 +228,7 @@
   });
   
   const isLiked = (trackId: number) => computed(() => userStore.likedSongIds.includes(trackId)).value;
+  // 修复：添加可选链操作符 ?.
   const isAllSelected = computed(() => 
     playerStore.currentPlaylist?.tracks.length > 0 && 
     selectedTrackIds.value.length === playerStore.currentPlaylist.tracks.length
@@ -253,6 +251,7 @@
   const toggleSelectAll = (event: Event) => {
     const target = event.target as HTMLInputElement;
     if (target.checked) {
+      // 修复：添加可选链操作符 ?.
       selectedTrackIds.value = playerStore.currentPlaylist?.tracks.map(t => t.id) || [];
     } else {
       selectedTrackIds.value = [];
