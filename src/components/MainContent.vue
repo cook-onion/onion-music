@@ -230,8 +230,10 @@
   const isLiked = (trackId: number) => computed(() => userStore.likedSongIds.includes(trackId)).value;
   // 修复：添加可选链操作符 ?.
   const isAllSelected = computed(() => 
+
+  
     playerStore.currentPlaylist?.tracks.length > 0 && 
-    selectedTrackIds.value.length === playerStore.currentPlaylist.tracks.length
+    selectedTrackIds.value.length === playerStore.currentPlaylist?.tracks.length
   );
   
   const formatDuration = (seconds: number): string => {
