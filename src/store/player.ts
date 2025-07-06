@@ -2,7 +2,7 @@
 
 import { defineStore } from 'pinia';
 import ColorThief from 'colorthief';
-import type { Playlist, Track, LyricLine } from '../types';
+import type { Playlist, Track, LyricLine, Artist, ArtistDetail } from '../types';
 import { apiFetch } from '../services/api';
 import { useUserStore } from './user';
 
@@ -16,13 +16,25 @@ export enum PlayMode {
 
 const colorThief = new ColorThief();
 
+// 辅助函数：将数组分割成指定大小的块
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    result.push(array.slice(i, i + size));
+  }
+  return result;
+}
+
 export const usePlayerStore = defineStore('player', {
   state: () => ({
     audio: null as HTMLAudioElement | null,
-    currentPlaylist: null as Playlist | null, // 当前正在浏览的歌单
-    playQueue: [] as Track[], // 独立于当前歌单的播放队列
+    currentView: 'playlist' as 'playlist' | 'artist',
+    currentPlaylist: null as Playlist | null,
+    currentArtist: null as ArtistDetail | null,
+    currentRecordType: null as 'weekly' | 'allTime' | null,
+    playQueue: [] as Track[],
     currentSong: null as Track | null,
-    currentSongIndex: -1, // 当前歌曲在 playQueue 中的索引
+    currentSongIndex: -1,
     currentCoverUrl: '',
     isPlaying: false,
     isLoading: false,
@@ -30,6 +42,7 @@ export const usePlayerStore = defineStore('player', {
     dominantColor: 'rgb(18, 18, 18)',
     parsedLrc: [] as LyricLine[],
     currentLrcIndex: -1,
+    songUrlCache: new Map<number, string>(),
     playback: {
       currentTime: 0,
       duration: 0,
@@ -46,15 +59,9 @@ export const usePlayerStore = defineStore('player', {
 
     changePlayMode() {
       switch (this.playMode) {
-        case PlayMode.List:
-          this.playMode = PlayMode.Single;
-          break;
-        case PlayMode.Single:
-          this.playMode = PlayMode.Random;
-          break;
-        case PlayMode.Random:
-          this.playMode = PlayMode.List;
-          break;
+        case PlayMode.List: this.playMode = PlayMode.Single; break;
+        case PlayMode.Single: this.playMode = PlayMode.Random; break;
+        case PlayMode.Random: this.playMode = PlayMode.List; break;
       }
     },
 
@@ -88,6 +95,13 @@ export const usePlayerStore = defineStore('player', {
       this.currentLrcIndex = -1;
       this.fetchLyrics(songToPlay.id);
 
+      if (this.songUrlCache.has(songToPlay.id)) {
+        this.audio.src = this.songUrlCache.get(songToPlay.id)!;
+        this.audio.play();
+        this.isPlaying = true;
+        return;
+      }
+
       const userStore = useUserStore();
       let url = `/song/url/v1?id=${songToPlay.id}&level=exhigh`;
       if (userStore.cookie) {
@@ -97,7 +111,18 @@ export const usePlayerStore = defineStore('player', {
       try {
         const res = await apiFetch(url);
         if (res.data[0].url) {
-          this.audio.src = res.data[0].url.replace(/^http:/, 'https:');
+          const songUrl = res.data[0].url.replace(/^http:/, 'https:');
+          
+          this.songUrlCache.set(songToPlay.id, songUrl);
+          if (this.songUrlCache.size > 100) {
+            const firstKey = this.songUrlCache.keys().next().value;
+            // 核心修复：添加非空判断，确保类型安全
+            if (firstKey !== undefined) {
+              this.songUrlCache.delete(firstKey);
+            }
+          }
+
+          this.audio.src = songUrl;
           this.audio.play();
           this.isPlaying = true;
         } else {
@@ -138,10 +163,34 @@ export const usePlayerStore = defineStore('player', {
     async getPlaylistDetail(id: number) {
       this.isLoading = true;
       this.currentPlaylist = null;
+      this.currentArtist = null;
+      this.currentRecordType = null;
+      this.currentView = 'playlist';
       try {
         const detailRes = await apiFetch(`/playlist/detail?id=${id}`);
-        const trackRes = await apiFetch(`/playlist/track/all?id=${id}&limit=500`);
-        this.currentPlaylist = { ...detailRes.playlist, tracks: trackRes.songs };
+        const playlistInfo = detailRes.playlist;
+        const trackIds = playlistInfo.trackIds.map((item: { id: number }) => item.id);
+
+        const idChunks = chunkArray(trackIds, 200);
+        let allTracks: Track[] = [];
+
+        const trackRequests = idChunks.map(chunk => 
+          apiFetch(`/song/detail?ids=${chunk.join(',')}`)
+        );
+        const trackResponses = await Promise.all(trackRequests);
+
+        for (const res of trackResponses) {
+          allTracks = allTracks.concat(res.songs);
+        }
+
+        this.currentPlaylist = {
+          id: playlistInfo.id,
+          name: playlistInfo.name,
+          coverImgUrl: playlistInfo.coverImgUrl,
+          description: playlistInfo.description,
+          tracks: allTracks,
+        };
+
       } catch (error) {
         console.error("获取歌单详情失败:", error);
       } finally {
@@ -152,6 +201,9 @@ export const usePlayerStore = defineStore('player', {
     async showLikedSongs() {
       this.isLoading = true;
       this.currentPlaylist = null;
+      this.currentArtist = null;
+      this.currentRecordType = null;
+      this.currentView = 'playlist';
       try {
         const userStore = useUserStore();
         if (userStore.likedSongIds.length === 0) return;
@@ -161,7 +213,7 @@ export const usePlayerStore = defineStore('player', {
           id: LIKED_SONGS_PLAYLIST_ID,
           name: '我喜欢的音乐',
           coverImgUrl: res.songs[0]?.al?.picUrl || '',
-          description: `共 ${res.songs.length} 首歌曲`,
+          description: `根据您的收藏生成`,
           tracks: res.songs,
         };
       } catch (error) {
@@ -171,6 +223,116 @@ export const usePlayerStore = defineStore('player', {
       }
     },
     
+    async showArtistPage(artistId: number) {
+      this.currentView = 'artist';
+      this.isLoading = true;
+      this.currentArtist = null;
+
+      try {
+        const [detailRes, topSongsRes, albumsRes] = await Promise.all([
+          apiFetch(`/artist/detail?id=${artistId}`),
+          apiFetch(`/artist/top/song?id=${artistId}`),
+          apiFetch(`/artist/album?id=${artistId}&limit=50`)
+        ]);
+
+        this.currentArtist = {
+          id: detailRes.data.artist.id,
+          name: detailRes.data.artist.name,
+          cover: detailRes.data.artist.cover,
+          briefDesc: detailRes.data.artist.briefDesc,
+          topSongs: topSongsRes.songs,
+          albums: albumsRes.hotAlbums,
+        };
+
+      } catch (error) {
+        console.error("获取歌手详情失败:", error);
+        this.currentView = 'playlist';
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async showAlbumAsPlaylist(albumId: number) {
+        this.isLoading = true;
+        this.currentPlaylist = null;
+        try {
+            const res = await apiFetch(`/album?id=${albumId}`);
+            const mainAlbum = res.album;
+            
+            const tracksWithCorrectAlbum = res.songs.map((song: Track) => {
+              return {
+                ...song,
+                al: {
+                  id: mainAlbum.id,
+                  name: mainAlbum.name,
+                  picUrl: mainAlbum.picUrl,
+                }
+              };
+            });
+
+            const albumPlaylist: Playlist = {
+                id: mainAlbum.id,
+                name: mainAlbum.name,
+                coverImgUrl: mainAlbum.picUrl,
+                description: mainAlbum.description,
+                tracks: tracksWithCorrectAlbum,
+            };
+
+            this.currentPlaylist = albumPlaylist;
+            this.currentView = 'playlist';
+        } catch (error) {
+            console.error("获取专辑详情失败:", error);
+        } finally {
+            this.isLoading = false;
+        }
+    },
+    
+    goBackToArtistView() {
+      if (this.currentArtist) {
+        this.currentView = 'artist';
+        this.currentPlaylist = null;
+      }
+    },
+    
+    async showUserRecord(type: 'weekly' | 'allTime') {
+      const userStore = useUserStore();
+      if (!userStore.profile || !userStore.cookie) {
+        alert("请先登录");
+        return;
+      }
+
+      this.isLoading = true;
+      this.currentPlaylist = null;
+      this.currentView = 'playlist';
+      this.currentRecordType = type;
+
+      try {
+        const apiType = type === 'weekly' ? 1 : 0;
+        const endpoint = `/user/record?uid=${userStore.profile.userId}&type=${apiType}&cookie=${encodeURIComponent(userStore.cookie)}`;
+        const res = await apiFetch(endpoint);
+        
+        const recordData = type === 'weekly' ? res.weekData : res.allData;
+        if (!recordData) throw new Error('No record data found');
+
+        const tracks = recordData.map((item: any) => item.song);
+        
+        const recordPlaylist: Playlist = {
+          id: type === 'weekly' ? -2 : -3,
+          name: `听歌排行`,
+          coverImgUrl: tracks[0]?.al?.picUrl || '',
+          description: `根据您${type === 'weekly' ? '最近一周' : '所有时间'}的听歌记录生成`,
+          tracks: tracks,
+        };
+
+        this.currentPlaylist = recordPlaylist;
+
+      } catch (error) {
+        console.error("获取听歌排行失败:", error);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
     async fetchLyrics(songId: number) {
       try {
         const res = await apiFetch(`/lyric?id=${songId}`);
@@ -178,7 +340,6 @@ export const usePlayerStore = defineStore('player', {
           this.parsedLrc = this.parseLrc(res.lrc.lyric);
         }
       } catch (error) {
-        console.error("获取歌词失败:", error);
         this.parsedLrc = [{ time: 0, text: '暂无歌词' }];
       }
     },
@@ -187,18 +348,12 @@ export const usePlayerStore = defineStore('player', {
       const lines = lrc.split('\n');
       const result: LyricLine[] = [];
       const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
-
       for (const line of lines) {
         const match = timeRegex.exec(line);
         if (match) {
-          const minutes = parseInt(match[1], 10);
-          const seconds = parseInt(match[2], 10);
-          const milliseconds = parseInt(match[3].padEnd(3, '0'), 10);
-          const time = minutes * 60 + seconds + milliseconds / 1000;
+          const time = parseInt(match[1], 10) * 60 + parseInt(match[2], 10) + parseInt(match[3].padEnd(3, '0'), 10) / 1000;
           const text = line.replace(timeRegex, '').trim();
-          if (text) {
-            result.push({ time, text });
-          }
+          if (text) result.push({ time, text });
         }
       }
       return result;
@@ -208,19 +363,12 @@ export const usePlayerStore = defineStore('player', {
       if (!this.audio) return;
       const currentTime = this.audio.currentTime;
       this.playback.currentTime = currentTime;
-
-      if (this.playback.duration > 0) {
-        this.playback.progress = (currentTime / this.playback.duration) * 100;
-      }
-
+      if (this.playback.duration > 0) this.playback.progress = (currentTime / this.playback.duration) * 100;
       if (this.parsedLrc.length > 0) {
         let newIndex = -1;
         for (let i = 0; i < this.parsedLrc.length; i++) {
-          if (currentTime >= this.parsedLrc[i].time) {
-            newIndex = i;
-          } else {
-            break;
-          }
+          if (currentTime >= this.parsedLrc[i].time) newIndex = i;
+          else break;
         }
         this.currentLrcIndex = newIndex;
       }
@@ -230,36 +378,21 @@ export const usePlayerStore = defineStore('player', {
       const img = new Image();
       img.crossOrigin = "Anonymous";
       img.src = `https://images.weserv.nl/?url=${imageUrl}`;
-
       img.onload = () => {
-        try {
-          const [r, g, b] = colorThief.getColor(img);
-          this.dominantColor = `rgb(${r}, ${g}, ${b})`;
-        } catch (e) {
-          this.dominantColor = 'rgb(18, 18, 18)';
-        }
+        try { this.dominantColor = `rgb(${colorThief.getColor(img).join(',')})`; } 
+        catch (e) { this.dominantColor = 'rgb(18, 18, 18)'; }
       };
-      img.onerror = () => {
-        this.dominantColor = 'rgb(18, 18, 18)';
-      };
+      img.onerror = () => { this.dominantColor = 'rgb(18, 18, 18)'; };
     },
 
     playNext() {
       if (this.playQueue.length === 0) return;
       switch (this.playMode) {
-        case PlayMode.Single:
-          if (this.currentSong) this.playSong(this.currentSong);
-          break;
-        case PlayMode.Random:
-          const randomIndex = Math.floor(Math.random() * this.playQueue.length);
-          this.playSong(this.playQueue[randomIndex]);
-          break;
-        case PlayMode.List:
-        default:
+        case PlayMode.Single: if (this.currentSong) this.playSong(this.currentSong); break;
+        case PlayMode.Random: this.playSong(this.playQueue[Math.floor(Math.random() * this.playQueue.length)]); break;
+        case PlayMode.List: default:
           let nextIndex = this.currentSongIndex + 1;
-          if (nextIndex >= this.playQueue.length) {
-            nextIndex = 0;
-          }
+          if (nextIndex >= this.playQueue.length) nextIndex = 0;
           this.playSong(this.playQueue[nextIndex]);
           break;
       }
@@ -268,19 +401,11 @@ export const usePlayerStore = defineStore('player', {
     playPrevious() {
       if (this.playQueue.length === 0) return;
       switch (this.playMode) {
-        case PlayMode.Single:
-          if (this.currentSong) this.playSong(this.currentSong);
-          break;
-        case PlayMode.Random:
-          const randomIndex = Math.floor(Math.random() * this.playQueue.length);
-          this.playSong(this.playQueue[randomIndex]);
-          break;
-        case PlayMode.List:
-        default:
+        case PlayMode.Single: if (this.currentSong) this.playSong(this.currentSong); break;
+        case PlayMode.Random: this.playSong(this.playQueue[Math.floor(Math.random() * this.playQueue.length)]); break;
+        case PlayMode.List: default:
           let prevIndex = this.currentSongIndex - 1;
-          if (prevIndex < 0) {
-            prevIndex = this.playQueue.length - 1;
-          }
+          if (prevIndex < 0) prevIndex = this.playQueue.length - 1;
           this.playSong(this.playQueue[prevIndex]);
           break;
       }
@@ -293,29 +418,26 @@ export const usePlayerStore = defineStore('player', {
     },
 
     onLoadedMetadata() {
-      if (!this.audio) return;
-      this.playback.duration = this.audio.duration;
+      if (this.audio) this.playback.duration = this.audio.duration;
     },
 
     setAudioTime(newTime: number) {
-        if (!this.audio || !this.currentSong) return;
+      if (this.audio && this.currentSong) {
         this.audio.currentTime = newTime;
         this.updateProgress();
+      }
     },
 
     setAudioVolume(newVolume: number) {
-        if (!this.audio) return;
-        const volume = Math.max(0, Math.min(1, newVolume));
-        this.playback.volume = volume;
-        this.audio.volume = volume;
+      if (this.audio) {
+        this.audio.volume = Math.max(0, Math.min(1, newVolume));
+        this.playback.volume = this.audio.volume;
+      }
     },
     
     onPlayEnded() {
-      if (this.playMode === PlayMode.Single) {
-        this.audio?.play();
-      } else {
-        this.playNext();
-      }
+      if (this.playMode === PlayMode.Single) this.audio?.play();
+      else this.playNext();
     }
   }
 });

@@ -1,13 +1,12 @@
 <!-- 
   文件路径: src/components/SideBar.vue
-  描述: 修复了因未使用导入而导致的TypeScript编译错误。
+  描述: 将“我喜欢的音乐”替换为“听歌排行”。
 -->
 <template>
     <aside 
       class="bg-[#121212] flex-shrink-0 flex flex-col p-2 relative transition-all duration-300 ease-in-out"
       :class="userStore.isSidebarCollapsed ? 'w-24' : 'w-64'"
     >
-      <!-- 切换按钮 -->
       <div class="flex mb-2" :class="userStore.isSidebarCollapsed ? 'justify-center' : 'justify-end'">
         <button @click="userStore.toggleSidebar()" class="p-2 rounded-full hover:bg-gray-700 transition-colors" title="收起/展开侧边栏">
           <PanelLeftClose v-if="!userStore.isSidebarCollapsed" class="w-5 h-5" />
@@ -15,7 +14,6 @@
         </button>
       </div>
   
-      <!-- 登录区域 -->
       <div class="bg-[#181818] rounded-lg p-4 mb-2" v-if="!userStore.isSidebarCollapsed">
         <div v-if="!userStore.profile" class="flex flex-col items-center">
           <h2 class="text-lg font-bold mb-2">登录网易云</h2>
@@ -47,7 +45,6 @@
         </div>
       </div>
   
-      <!-- 歌单列表 -->
       <div 
         class="bg-[#181818] rounded-lg flex-1 overflow-y-auto overflow-x-hidden transition-opacity"
         :class="{'opacity-50 pointer-events-none': playerStore.isLoading}"
@@ -55,25 +52,28 @@
         <h2 class="text-lg font-bold p-4 pb-2" v-if="!userStore.isSidebarCollapsed">我的音乐</h2>
         <ul v-if="userStore.profile" class="space-y-1 p-2">
           <li
-            @click="playerStore.showLikedSongs()"
-            :title="userStore.isSidebarCollapsed ? '我喜欢的音乐' : ''"
+            @click="playerStore.showUserRecord('weekly')"
+            :title="userStore.isSidebarCollapsed ? '听歌排行' : ''"
             class="flex items-center p-2 hover:bg-[#282828] cursor-pointer rounded-md truncate"
             :class="{ 
-              'bg-blue-600 text-white': playerStore.currentPlaylist && playerStore.currentPlaylist.id === LIKED_SONGS_PLAYLIST_ID,
+              'bg-blue-600 text-white': playerStore.currentRecordType !== null,
               'justify-center': userStore.isSidebarCollapsed
             }">
-            <div class="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 rounded-md mr-3">
-              <Heart class="w-5 h-5 text-white" />
+            <div class="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-gradient-to-br from-purple-500 to-indigo-600 rounded-md mr-3">
+              <BarChart2 class="w-5 h-5 text-white" />
             </div>
-            <span v-if="!userStore.isSidebarCollapsed" class="font-semibold">我喜欢的音乐</span>
+            <span v-if="!userStore.isSidebarCollapsed" class="font-semibold">听歌排行</span>
           </li>
+  
+        
+  
           <hr v-if="!userStore.isSidebarCollapsed && userStore.playlists.length > 0" class="border-gray-700 my-2">
           <li v-for="playlist in userStore.playlists" :key="playlist.id"
               @click="playerStore.getPlaylistDetail(playlist.id)"
               :title="userStore.isSidebarCollapsed ? playlist.name : ''"
               class="flex items-center p-2 hover:bg-[#282828] cursor-pointer rounded-md truncate"
               :class="{ 
-                'bg-blue-600 text-white': playerStore.currentPlaylist && playerStore.currentPlaylist.id === playlist.id,
+                'bg-blue-600 text-white': playerStore.currentPlaylist && playerStore.currentPlaylist.id === playlist.id && playerStore.currentRecordType === null,
                 'justify-center': userStore.isSidebarCollapsed
               }">
               <img 
@@ -95,8 +95,7 @@
   <script setup lang="ts">
   import { useUserStore } from '../store/user';
   import { usePlayerStore, LIKED_SONGS_PLAYLIST_ID } from '../store/player';
-  // 核心修改：移除了未被使用的 'Music' 组件
-  import { Heart, LogOut, PanelLeftClose, PanelRightClose } from 'lucide-vue-next';
+  import { Heart, LogOut, PanelLeftClose, PanelRightClose, BarChart2 } from 'lucide-vue-next';
   
   const userStore = useUserStore();
   const playerStore = usePlayerStore();
