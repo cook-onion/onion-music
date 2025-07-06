@@ -3,7 +3,7 @@
 // 使用 Vite 的内置环境变量来动态设置 API 的基础URL。
 const apiBaseUrl = import.meta.env.DEV 
   ? '/api' 
-  : 'https://neteasecloudmusicapi-psi-seven.vercel.app';
+  : 'https://api.cook-onion.fun/';
 
 // 使用一个稳定、公开的IP地址作为realIP参数。
 const realIP = '114.114.114.114';

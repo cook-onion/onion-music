@@ -14,6 +14,7 @@ export default defineConfig({
     proxy: {
       '/api': {
         // target: 'https://neteasecloudmusicapi-psi-seven.vercel.app/', // 目标服务器地址
+        // target: 'https://api.cook-onion.fun/', // 目标服务器地址
         target: 'http://localhost:3000', // 目标服务器地址
         changeOrigin: true, // 是否跨域
         rewrite: (path) => path.replace(/^\/api/, '') // 重写路径
