@@ -21,7 +21,16 @@
     </div>
     
     <PlayerFooter />
-
+    <transition
+      enter-active-class="transition-transform duration-500 ease-in-out"
+      leave-active-class="transition-transform duration-500 ease-in-out"
+      enter-from-class="translate-y-full"
+      enter-to-class="translate-y-0"
+      leave-from-class="translate-y-0"
+      leave-to-class="translate-y-full"
+    >
+      <SongDetailPage v-if="playerStore.isDetailPageVisible" />
+    </transition>
     <audio
       ref="audioPlayer"
       @timeupdate="playerStore.updateProgress()"
@@ -36,6 +45,7 @@ import { ref, onMounted } from 'vue';
 import SideBar from './components/SideBar.vue';
 import MainContent from './components/MainContent.vue';
 import PlayerFooter from './components/PlayerFooter.vue';
+import SongDetailPage from './components/SongDetailPage.vue'; // 引入新组件
 import { usePlayerStore } from './store/player';
 import { useUserStore } from './store/user';
 

@@ -45,4 +45,25 @@ export interface UserProfile {
     topSongs: Track[];
     albums: any[]; // API返回的专辑类型比较复杂，这里用any简化
   }
-  
+  // 新增：被回复的评论信息
+export interface BeReplied {
+    user: {
+      userId: number;
+      nickname: string;
+    };
+    content: string;
+  }
+  // 新增：评论的数据结构
+export interface Comment {
+    user: {
+      userId: number;
+      nickname: string;
+      avatarUrl: string;
+    };
+    commentId: number;
+    content: string;
+    time: number;
+    likedCount: number;
+    liked: boolean;
+    beReplied?: BeReplied[]; // 可选的被回复数组
+  }

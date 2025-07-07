@@ -41,7 +41,7 @@
   
       <!-- 左侧歌曲信息 -->
       <div class="flex items-center w-1/4 min-w-0">
-        <img v-if="playerStore.currentSong" :src="playerStore.currentSong.al.picUrl" class="w-16 h-16 rounded-md mr-4 flex-shrink-0">
+        <img v-if="playerStore.currentSong" :src="playerStore.currentSong.al.picUrl" class="w-16 h-16 rounded-md mr-4 cursor-pointer flex-shrink-0"   @click="playerStore.toggleDetailPage(true)">
         <div v-if="playerStore.currentSong" class="truncate">
           <p class="font-bold truncate">{{ playerStore.currentSong.name }}</p>
           <p class="text-xs text-gray-400 truncate">
@@ -97,7 +97,7 @@
       
       <!-- 右侧区域: 歌词 + 音量控制 -->
       <div class="flex items-center justify-end w-1/4 space-x-4">
-        <div class="w-64 h-16 overflow-hidden relative text-center" v-if="playerStore.parsedLrc.length > 0">
+        <div class="w-64 h-16 overflow-hidden relative text-center cursor-pointer" v-if="playerStore.parsedLrc.length > 0" @click="playerStore.toggleDetailPage(true)">
           <div 
             class="absolute inset-0" 
             style="mask-image: linear-gradient(to bottom, transparent, black 25%, black 75%, transparent);"

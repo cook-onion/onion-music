@@ -13,6 +13,7 @@ export const useUserStore = defineStore('user', {
     profile: null as UserProfile | null,
     level: 0,
     cookie: null as string | null,
+    vipType: 0, // 新增：用户VIP类型，0为非VIP
     isSidebarCollapsed: false, // 新增：控制侧边栏收缩状态
     qr: {
       key: '',
@@ -27,7 +28,12 @@ export const useUserStore = defineStore('user', {
       playlists: false,
     },
   }),
-
+  getters: {
+    // 新增：判断用户是否为VIP的计算属性
+    isVip(state): boolean {
+      return state.vipType > 0;
+    }
+  },
   actions: {
     // 新增：切换侧边栏状态的方法
 
@@ -100,22 +106,23 @@ export const useUserStore = defineStore('user', {
       }, 3000);
     },
     async getLoginStatus(cookie: string) {
-      try {
-        const statusRes = await apiFetch(`/login/status?timestamp=${Date.now()}&cookie=${encodeURIComponent(cookie)}`);
-        if (statusRes.data.code === 200 && statusRes.data.profile) {
-          this.profile = statusRes.data.profile;
-          await this.getUserAccountInfo();
-          if (this.profile) {
-            await this.getUserPlaylists(this.profile.userId);
-            await this.fetchLikelist(this.profile.userId);
+        try {
+          const statusRes = await apiFetch(`/login/status?timestamp=${Date.now()}&cookie=${encodeURIComponent(cookie)}`);
+          if (statusRes.data.code === 200 && statusRes.data.profile) {
+            this.profile = statusRes.data.profile;
+            this.vipType = statusRes.data.profile.vipType; // 保存VIP状态
+            await this.getUserAccountInfo();
+            if (this.profile) {
+              await this.getUserPlaylists(this.profile.userId);
+              await this.fetchLikelist(this.profile.userId);
+            }
+            this.saveSessionToCache();
           }
-          this.saveSessionToCache();
+        } catch (e) {
+          console.error('获取登录状态的请求失败', e);
+          alert('获取登录状态失败！请检查API服务CORS设置。');
         }
-      } catch (e) {
-        console.error('获取登录状态的请求失败', e);
-        alert('获取登录状态失败！请检查API服务CORS设置。');
-      }
-    },
+      },
     async getUserAccountInfo() {
       if (!this.cookie) return;
       const levelRes = await apiFetch(`/user/level?cookie=${encodeURIComponent(this.cookie)}`);
@@ -149,6 +156,7 @@ export const useUserStore = defineStore('user', {
         profile: this.profile,
         level: this.level,
         cookie: this.cookie,
+        vipType: this.vipType, // 缓存VIP状态
         loginTimestamp: Date.now()
       };
       localStorage.setItem(CACHE_KEY, JSON.stringify(sessionData));
@@ -165,6 +173,7 @@ export const useUserStore = defineStore('user', {
         this.profile = sessionData.profile;
         this.level = sessionData.level;
         this.cookie = sessionData.cookie;
+        this.vipType = sessionData.vipType || 0; // 从缓存恢复VIP状态
         if (this.profile) {
           this.getUserPlaylists(this.profile.userId);
           this.fetchLikelist(this.profile.userId);
@@ -177,6 +186,7 @@ export const useUserStore = defineStore('user', {
       this.profile = null;
       this.level = 0;
       this.cookie = null;
+      this.vipType = 0; // 登出时重置VIP状态
       this.playlists = [];
       this.likedSongIds = [];
       this.qr.img = '';

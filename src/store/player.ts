@@ -2,10 +2,11 @@
 
 import { defineStore } from 'pinia';
 import ColorThief from 'colorthief';
-import type { Playlist, Track, LyricLine, ArtistDetail } from '../types';
+import type { Playlist, Track, LyricLine, ArtistDetail, Comment } from '../types';
 import { apiFetch } from '../services/api';
 import { useUserStore } from './user';
 
+export const LIKED_SONGS_PLAYLIST_ID = -1;
 
 export enum PlayMode {
   List = 'LIST',
@@ -42,6 +43,18 @@ export const usePlayerStore = defineStore('player', {
     parsedLrc: [] as LyricLine[],
     currentLrcIndex: -1,
     songUrlCache: new Map<number, string>(),
+    isDetailPageVisible: false,
+    detailPageView: 'cover' as 'cover' | 'lyrics', // 新增：详情页视图
+    audioQuality: 'exhigh' as 'standard' | 'higher' | 'exhigh' | 'lossless',
+    currentSongComments: {
+        hotComments: [] as Comment[],
+        comments: [] as Comment[],
+        total: 0,
+        cursor: '' as string | null, // 用于分页
+        hasMore: true,
+      },
+      commentSortType: 1 as 1 | 2 | 3, // 1:推荐, 2:最热, 3:最新
+    isCommentLoading: false,
     playback: {
       currentTime: 0,
       duration: 0,
@@ -102,7 +115,7 @@ export const usePlayerStore = defineStore('player', {
       }
 
       const userStore = useUserStore();
-      let url = `/song/url/v1?id=${songToPlay.id}&level=exhigh`;
+      let url = `/song/url/v1?id=${songToPlay.id}&level=${this.audioQuality}`;
       if (userStore.cookie) {
         url += `&cookie=${encodeURIComponent(userStore.cookie)}`;
       }
@@ -115,7 +128,6 @@ export const usePlayerStore = defineStore('player', {
           this.songUrlCache.set(songToPlay.id, songUrl);
           if (this.songUrlCache.size > 100) {
             const firstKey = this.songUrlCache.keys().next().value;
-            // 核心修复：添加非空判断，确保类型安全
             if (firstKey !== undefined) {
               this.songUrlCache.delete(firstKey);
             }
@@ -158,14 +170,14 @@ export const usePlayerStore = defineStore('player', {
       }
       alert(`已添加 ${uniqueTracks.length} 首歌曲到播放列表`);
     },
-    // 添加歌曲到播放队列，但不立即播放
 
     reorderQueue(newQueue: Track[]) {
-        this.playQueue = newQueue;
-        if (this.currentSong) {
-          this.currentSongIndex = this.playQueue.findIndex(track => track.id === this.currentSong!.id);
-        }
-      },
+      this.playQueue = newQueue;
+      if (this.currentSong) {
+        this.currentSongIndex = this.playQueue.findIndex(track => track.id === this.currentSong!.id);
+      }
+    },
+
     async getPlaylistDetail(id: number) {
       this.isLoading = true;
       this.currentPlaylist = null;
@@ -203,8 +215,6 @@ export const usePlayerStore = defineStore('player', {
         this.isLoading = false;
       }
     },
-
-   
     
     async showArtistPage(artistId: number) {
       this.currentView = 'artist';
@@ -421,6 +431,111 @@ export const usePlayerStore = defineStore('player', {
     onPlayEnded() {
       if (this.playMode === PlayMode.Single) this.audio?.play();
       else this.playNext();
+    },
+
+    toggleDetailPage(visible: boolean) {
+      this.isDetailPageVisible = visible;
+      if (visible && this.currentSong) {
+        this.fetchComments(true);
+      }
+    },
+
+    toggleDetailView() {
+        this.detailPageView = this.detailPageView === 'cover' ? 'lyrics' : 'cover';
+      },
+      async setAudioQuality(quality: 'standard' | 'higher' | 'exhigh' | 'lossless') {
+        this.audioQuality = quality;
+        if (this.currentSong) {
+          await this.playSong(this.currentSong);
+        }
+      },
+
+      async setCommentSortType(sortType: 1 | 2 | 3) {
+        this.commentSortType = sortType;
+        // 切换排序时，强制刷新评论
+        await this.fetchComments(true);
+      },
+  
+  // 核心修改：获取评论，支持分页和排序
+  async fetchComments(isInitial = false) {
+    if (!this.currentSong || this.isCommentLoading) return;
+    if (isInitial) {
+      this.currentSongComments.comments = [];
+      this.currentSongComments.hotComments = [];
+      this.currentSongComments.cursor = null;
+      this.currentSongComments.hasMore = true;
+    }
+    if (!this.currentSongComments.hasMore) return;
+
+    this.isCommentLoading = true;
+    try {
+      const songId = this.currentSong.id;
+      let endpoint = `/comment/new?type=0&id=${songId}&sortType=${this.commentSortType}&pageSize=20`;
+      if (this.currentSongComments.cursor) {
+        endpoint += `&cursor=${this.currentSongComments.cursor}`;
+      }
+      
+      const res = await apiFetch(endpoint);
+      const data = res.data;
+
+      if (isInitial && data.hotComments) {
+        this.currentSongComments.hotComments = data.hotComments;
+      }
+      this.currentSongComments.comments.push(...data.comments);
+      this.currentSongComments.total = data.totalCount;
+      this.currentSongComments.hasMore = data.hasMore;
+      this.currentSongComments.cursor = data.cursor;
+
+    } catch (error) {
+      console.error("获取评论失败:", error);
+    } finally {
+      this.isCommentLoading = false;
+    }
+  },
+  async replyToComment(commentId: number, content: string) {
+    const userStore = useUserStore();
+    if (!userStore.cookie) { alert("请先登录"); return false; }
+    
+    const endpoint = `/comment?t=2&type=0&id=${this.currentSong!.id}&content=${encodeURIComponent(content)}&commentId=${commentId}&cookie=${encodeURIComponent(userStore.cookie)}`;
+    
+    try {
+      const res = await apiFetch(endpoint);
+      if (res.code === 200) {
+        alert('回复成功！');
+        // 可以在这里刷新评论区或进行乐观更新
+        return true;
+      } else {
+        throw new Error(res.message || '回复失败');
+      }
+    } catch (error) {
+      console.error("回复评论失败:", error);
+      alert('回复失败，请稍后再试');
+      return false;
+    }
+  },
+
+    async likeComment(commentId: number, liked: boolean) {
+      const userStore = useUserStore();
+      if (!userStore.cookie) { alert("请先登录"); return; }
+      const t = liked ? 1 : 0;
+      const type = 0;
+      try {
+        const endpoint = `/comment/like?id=${this.currentSong!.id}&cid=${commentId}&t=${t}&type=${type}&cookie=${encodeURIComponent(userStore.cookie)}`;
+        const res = await apiFetch(endpoint);
+        if (res.code === 200) {
+          const updateComment = (list: Comment[]) => {
+            const comment = list.find(c => c.commentId === commentId);
+            if (comment) {
+              comment.liked = liked;
+              comment.likedCount += liked ? 1 : -1;
+            }
+          };
+          updateComment(this.currentSongComments.hotComments);
+          updateComment(this.currentSongComments.comments);
+        }
+      } catch (error) {
+        console.error("点赞评论失败:", error);
+      }
     }
   }
 });
