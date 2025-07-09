@@ -99,6 +99,12 @@ export const usePlayerStore = defineStore('player', {
       }
 
       const songToPlay = this.playQueue[this.currentSongIndex];
+
+       // 如果已经是当前歌曲，则不重新加载，仅播放/暂停
+       if (this.currentSong?.id === songToPlay.id) {
+        this.togglePlayPause();
+        return;
+      }
       this.currentSong = songToPlay;
       this.currentCoverUrl = songToPlay.al.picUrl;
       this.updateDominantColor(songToPlay.al.picUrl);
@@ -106,6 +112,7 @@ export const usePlayerStore = defineStore('player', {
       this.parsedLrc = [];
       this.currentLrcIndex = -1;
       this.fetchLyrics(songToPlay.id);
+      this.fetchComments(true);
 
       if (this.songUrlCache.has(songToPlay.id)) {
         this.audio.src = this.songUrlCache.get(songToPlay.id)!;
@@ -536,6 +543,30 @@ export const usePlayerStore = defineStore('player', {
       } catch (error) {
         console.error("点赞评论失败:", error);
       }
-    }
+    },
+
+    async postComment(content: string) {
+        const userStore = useUserStore();
+        if (!userStore.cookie) { alert("请先登录"); return false; }
+        if (!this.currentSong) return false;
+  
+        const endpoint = `/comment?t=1&type=0&id=${this.currentSong.id}&content=${encodeURIComponent(content)}&cookie=${encodeURIComponent(userStore.cookie)}`;
+        
+        try {
+          const res = await apiFetch(endpoint);
+          if (res.code === 200) {
+            alert('评论成功！');
+            // 评论成功后强制刷新
+            this.fetchComments(true);
+            return true;
+          } else {
+            throw new Error(res.message || '评论失败');
+          }
+        } catch (error) {
+          console.error("发送评论失败:", error);
+          alert('评论失败，请稍后再试');
+          return false;
+        }
+      }
   }
 });
